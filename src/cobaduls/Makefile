@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 ifndef HOST_CC
     HOST_CC = gcc
-    HOST_CFLAGS = -Wall -Wno-incompatible-library-redeclaration -I../common -O0
+    HOST_CFLAGS = -Wall -Wno-incompatible-library-redeclaration -I../common -O3
 endif
 
 ifndef CROSS
@@ -10,12 +10,9 @@ ifndef CROSS
 
     ABI = ilp32e
 
-    # CROSS = riscv64-linux-gnu
-    CROSS = riscv64-unknown-elf
+    CROSS = riscv64-linux-gnu
     
     CCPATH = /usr/bin
-
-    # HARVARD = 1
 endif
 
 ifndef BUILD
@@ -35,13 +32,13 @@ endif
     OD = $(CCPATH)/$(CROSS)-objdump
    CPP = $(CCPATH)/$(CROSS)-cpp
 
-CCFLAGS = -Wall -fcommon -ffreestanding -O1
+CCFLAGS = -Wall -fcommon -ffreestanding -O2
 CCFLAGS += -march=$(ARCH) -mabi=$(ABI) -I$(DARKLIBC)/include
 CCFLAGS += -D__RISCV__ -DBUILD="\"$(BUILD)\"" -DARCH="\"$(ARCH)\""
 #CCFLAGS += -DSMALL # enable this to make FW smaller!
 ASFLAGS = -march=$(ARCH)
 ARFLAGS = -rcs
-LDFLAGS = -Map=$(PROJ).map -m elf32lriscv -static -gc-sections  --entry=main -Ttext=0 -T$(PROJ).ld
+LDFLAGS = -Map=$(PROJ).map -m elf32lriscv -static -gc-sections  --entry=_main -Ttext=0 - T$(PROJ).ld
 LDLIBS  = $(DARKLIBC)/darklibc.a
 CPFLAGS = -P 
 
@@ -68,19 +65,17 @@ SRCS = $(PROJ).c
 LINK = $(PROJ).ld
 ELEP = $(PROJ).elf
 LIBS = $(PROJ).a $(DARKLIBC)/darklibc.a 
-DEPS = $(SRCS) $(ASMS) $(OBJS) $(LIBS) $(PROJ).lds $(PROJ).ld  $(DARKLIBC)/darklibc.a
+DEPS = $(SRCS) $(ASMS) $(OBJS) $(LIBS) $(PROJ).lds # $(PROJ).ld  $(DARKLIBC)/darklibc.a
 
 TARGETS1 = $(PROJ).a
 TARGETS2 = $(PROJ).bin
 TARGETS3 = $(PROJ).mem
 TARGETS4 = $(PROJ).o
 TARGETS5 = $(PROJ).out
-TARGETSa = $(PROJ).rom.mem
-TARGETSb = $(PROJ).ram.mem
 
 .PHONY: all
 
-all: $(ASMS) $(TARGETS1) $(TARGETS2) $(TARGETSa) $(TARGETSb) $(TARGETS4) $(TARGETS3) $(LIBS) $(PROJ).a $(LINK)
+all: $(ASMS) $(TARGETS1) $(TARGETS2) $(TARGETS3) $(TARGETS4) $(TARGETS5) $(OBJS) $(LIBS) $(ELEP) $(PROJ).a 
 #	@echo sources ok for $(TARGETS).
 
 res:
@@ -101,36 +96,22 @@ $(PROJ).a: $(OBJS)
 $(PROJ).out: $(OBJS) $(PROJ).ld $(LIBS)
 	$(RL) $(LDLIBS)
 	$(LD) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
-	$(OD) $(ODFLAGS) $@ > $(PROJ).S
+#	$(OD) $(ODFLAGS) $@ > $(PROJ).S
 
 $(PROJ).ld: $(PROJ).lds Makefile
 	$(CPP) $(CPFLAGS) $(PROJ).lds $(PROJ).ld
 
-$(PROJ).bin: $(PROJ).out
+$(PROJ).bin: $(PROJ).o
 	$(OC) $(OCFLAGS) $< $(PROJ).bin
 
-$(ELEP): $(PROJ).out
+$(ELEP): $(PROJ).o
 	$(LD) $(LDFLAGS) -o $@ $<
 
 # Rule untuk menampilkan informasi dari file ELF
 objdumps: $(ELEP)
 	$(OD) $(ODFLAGS) $(ELEP)
 
-$(PROJ).mem: $(PROJ).out
+$(PROJ).mem: $(OBJS)
 	hexdump -ve '1/4 "%08x\n"' $(PROJ).bin > $@ 
 	wc -l $@
 	@echo mem ok.
-
-$(PROJ).ram.mem: $(PROJ).out
-	$(OC) $(OCFLAGS) $< $(PROJ).data --only-section .*data*
-	hexdump -ve '1/4 "%08x\n"' $(PROJ).data > $@
-	#xxd -p -c 4 -g 4 $< > $@
-	wc -l $@
-	@echo ram ok.
-
-$(PROJ).rom.mem: $(PROJ).out
-	$(OC) $(OCFLAGS) $< $(PROJ).text --only-section .*text* 
-	hexdump -ve '1/4 "%08x\n"' $(PROJ).text > $@
-	#xxd -p -c 4 -g 4 $< > $@
-	wc -l $@
-	@echo rom ok.
